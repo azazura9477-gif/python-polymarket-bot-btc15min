@@ -68,6 +68,7 @@ class PolymarketClient:
         try:
             next_cursor = ""
             scanned_count = 0
+            candidates = []
             
             while True:
                 # Get active markets with pagination
@@ -98,19 +99,41 @@ class PolymarketClient:
                         
                     title = market.get('question', '').lower()
                     
-                    # Check if all required keywords are in the title
-                    if all(keyword.lower() in title for keyword in ['bitcoin', '15']):
+                    # More specific matching for "15 minutes" or "15min" markets
+                    # Avoid matching dates like "March 15" or "15th"
+                    is_15min = any(pattern in title for pattern in [
+                        '15 min', '15min', '15-min', 'fifteen min',
+                        'next 15', 'in 15 minutes'
+                    ])
+                    
+                    # Must have both bitcoin and 15min reference
+                    if 'bitcoin' in title and is_15min:
                         # Check if it's an Up/Down market
                         tokens = market.get('tokens', [])
                         if len(tokens) == 2:
                             token_names = [t.get('outcome', '').lower() for t in tokens]
                             if 'up' in token_names and 'down' in token_names:
-                                logger.info(f"Found Bitcoin 15min market: {market.get('question')} (ID: {market.get('condition_id')})")
-                                return market
+                                # Check if market is still active (not ended)
+                                end_date = market.get('end_date_iso')
+                                active = market.get('active', True)
+                                
+                                if active:
+                                    candidates.append(market)
+                                    logger.info(f"Found candidate: {market.get('question')} (ID: {market.get('condition_id')})")
                 
-                # Stop if no next page
+                # Stop if no next page or if we found candidates
                 if not next_cursor or next_cursor == "0":
                     break
+                    
+                # Stop early if we found some candidates and scanned enough
+                if candidates and scanned_count > 5000:
+                    break
+            
+            if candidates:
+                # Return the first active candidate
+                market = candidates[0]
+                logger.info(f"Selected market: {market.get('question')} (ID: {market.get('condition_id')})")
+                return market
             
             logger.warning(f"No active Bitcoin 15min Up/Down market found after scanning {scanned_count} markets")
             return None
