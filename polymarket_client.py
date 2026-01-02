@@ -217,17 +217,32 @@ class PolymarketClient:
         try:
             # Create params for COLLATERAL asset type (USDC)
             params = BalanceAllowanceParams(asset_type=AssetType.COLLATERAL)
-            
+
             # Use get_balance_allowance to fetch USDC balance
             balance_allowance = self.client.get_balance_allowance(params=params)
-            
-            # The response contains balance information
-            usdc_balance = balance_allowance.get('balance')
-            if usdc_balance is not None:
-                usdc_balance = float(usdc_balance)
+
+            # The response contains balance information; be robust to multiple formats
+            usdc_balance_raw = None
+            if isinstance(balance_allowance, dict):
+                usdc_balance_raw = balance_allowance.get('balance')
+
+            # Normalize to float USDC amount
+            if usdc_balance_raw is None:
+                usdc_balance = 0.0
             else:
                 usdc_balance = 0.0
-                
+                # Try float parsing first (covers '0', '0.0', '1.23')
+                try:
+                    usdc_balance = float(usdc_balance_raw)
+                except (ValueError, TypeError):
+                    # If it's an integer-like string representing base units (e.g. 6 decimals), convert
+                    try:
+                        int_val = int(usdc_balance_raw)
+                        # Assume USDC has 6 decimals if value looks large
+                        usdc_balance = int_val / 1e6
+                    except Exception:
+                        usdc_balance = 0.0
+
             logger.info(f"Current USDC balance: {usdc_balance}")
             return usdc_balance
         except Exception as e:
