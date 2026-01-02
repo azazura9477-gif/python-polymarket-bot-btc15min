@@ -92,8 +92,11 @@ class PolymarketTradingBot:
         """
         self.logger.info("Searching for Bitcoin 15min Up/Down market...")
         
+        manual_condition_id = self.config['market_settings'].get('manual_condition_id')
+        
         market = self.client.find_bitcoin_15min_market(
-            self.config['market_settings']['market_keywords']
+            keywords=self.config['market_settings']['market_keywords'],
+            manual_condition_id=manual_condition_id
         )
         
         if market:

@@ -12,7 +12,8 @@
     "check_interval_seconds": 1
   },
   "market_settings": {
-    "market_keywords": ["bitcoin", "btc", "15min", "15 min", "up", "down"]
+    "market_keywords": ["bitcoin", "btc", "15min", "15 min", "up", "down"],
+    "manual_condition_id": null
   },
   "logging": {
     "log_file": "trading_bot.log",
