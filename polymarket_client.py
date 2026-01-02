@@ -36,6 +36,13 @@ class PolymarketClient:
             logger.info("Polymarket client initialized successfully")
             logger.info(f"Connected with wallet: {wallet_address}")
             
+            # Perform Level 1 authentication (required before Level 2)
+            try:
+                self.client.assert_level_1_auth()
+                logger.info("Level 1 authentication successful")
+            except Exception as auth_error:
+                logger.warning(f"Level 1 auth warning: {auth_error}")
+            
             # Create or derive API credentials for authenticated endpoints
             try:
                 api_creds = self.client.create_or_derive_api_creds()
@@ -209,8 +216,16 @@ class PolymarketClient:
         """
         try:
             # Use get_balance_allowance to fetch USDC balance
-            balance_allowance = self.client.get_balance_allowance()
-            usdc_balance = float(balance_allowance.get('balance', 0))
+            # Pass params=None to use defaults (gets all balances)
+            balance_allowance = self.client.get_balance_allowance(params=None)
+            
+            # The response contains balance information
+            usdc_balance = balance_allowance.get('balance')
+            if usdc_balance is not None:
+                usdc_balance = float(usdc_balance)
+            else:
+                usdc_balance = 0.0
+                
             logger.info(f"Current USDC balance: {usdc_balance}")
             return usdc_balance
         except Exception as e:
