@@ -137,6 +137,12 @@ class PolymarketTradingBot:
             # Calculate size based on position value
             size = self.position_value_usdc / current_price
             
+            # Ensure minimum order value of $1.01 (Polymarket requirement)
+            order_value = size * current_price
+            if order_value < 1.01:
+                size = 1.01 / current_price
+                self.logger.info(f"Adjusted size to {size:.4f} shares to meet $1.01 minimum")
+            
             # Place order
             order_id = self.client.place_order(
                 token_id=token_id,
@@ -172,6 +178,12 @@ class PolymarketTradingBot:
             if prices and outcome in prices:
                 entry_price = prices[outcome]
                 size = self.position_value_usdc / entry_price
+                
+                # Ensure minimum order value of $1.01
+                order_value = size * entry_price
+                if order_value < 1.01:
+                    size = 1.01 / entry_price
+                    logger.info(f"Adjusted size to {size:.4f} to meet $1.01 minimum (was ${order_value:.4f})")
                 
                 # Update strategy
                 self.strategy.enter_position(outcome, entry_price)
