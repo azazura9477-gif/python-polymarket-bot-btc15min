@@ -3,6 +3,8 @@ Polymarket API client wrapper for market detection and trading operations.
 """
 import logging
 import requests
+import time
+import re
 from typing import Optional, Dict, List, Tuple
 from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import OrderArgs, OrderType, BalanceAllowanceParams, AssetType
@@ -91,8 +93,6 @@ class PolymarketClient:
             
             # NEW STRATEGY: Scrape web page to find active market
             logger.info("🌐 Scraping Polymarket web to find active BTC 15min market...")
-            import re
-            import requests
             
             now = int(time.time())
             
