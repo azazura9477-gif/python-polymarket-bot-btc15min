@@ -63,8 +63,10 @@ class PolymarketClient:
         """
         Find the active Bitcoin Up/Down 15min market.
         
-        If manual_condition_id is provided, fetch that specific market.
-        Otherwise, search using CLOB API with optimized pagination.
+        Strategy:
+        1. If manual_condition_id provided, fetch directly
+        2. Generate likely slugs based on 15min timestamp intervals
+        3. Scan only the first 100 markets (most recent) for matching slug
         
         Args:
             keywords: List of keywords (not used, kept for compatibility)
@@ -87,69 +89,107 @@ class PolymarketClient:
                 except Exception as e:
                     logger.error(f"Error fetching market {manual_condition_id}: {e}")
             
-            # Otherwise, search using CLOB API with limited scan
-            logger.info("Searching for Bitcoin 15min markets via CLOB API (limited scan)...")
+            # Generate likely slugs based on current time
+            import time
+            from datetime import datetime
             
-            next_cursor = ""
-            scanned_count = 0
-            max_scan = 2000  # Limit to first 2000 markets only
+            now = int(time.time())
             
-            while scanned_count < max_scan:
-                response = self.client.get_markets(next_cursor=next_cursor)
+            # Generate timestamps for 15min windows (check a range around current time)
+            # Each window is 900 seconds (15 minutes)
+            candidate_slugs = []
+            for i in range(-2, 10):  # Check 2 past and 9 future windows (~ 2.5 hours)
+                ts = now + (i * 900)
+                # Round to 900-second boundary
+                ts_rounded = (ts // 900) * 900
+                slug = f"btc-updown-15m-{ts_rounded}"
+                dt = datetime.fromtimestamp(ts_rounded)
+                candidate_slugs.append((slug, ts_rounded, dt))
+            
+            logger.info(f"Generated {len(candidate_slugs)} candidate slugs for timestamps")
+            logger.debug(f"Time range: {candidate_slugs[0][2]} to {candidate_slugs[-1][2]}")
+            
+            # Scan only the FIRST 100 markets (most recent) from CLOB API
+            logger.info("Scanning first 100 markets from CLOB API...")
+            
+            try:
+                response = self.client.get_markets(next_cursor="")
                 
                 markets = []
                 if isinstance(response, dict):
-                    markets = response.get('data', [])
-                    next_cursor = response.get('next_cursor', "")
+                    markets = response.get('data', [])[:100]  # Only first 100
                 elif isinstance(response, list):
-                    markets = response
-                    next_cursor = ""
-                else:
-                    break
+                    markets = response[:100]
                 
-                if not markets:
-                    break
+                logger.info(f"Retrieved {len(markets)} recent markets")
                 
-                scanned_count += len(markets)
+                # Match against our candidate slugs
+                candidate_slug_set = set(slug for slug, _, _ in candidate_slugs)
                 
-                # Search for Bitcoin 15min market
                 for market in markets:
                     if not isinstance(market, dict):
                         continue
                     
-                    title = market.get('question', '').lower()
-                    slug = market.get('slug', '').lower()
+                    market_slug = market.get('slug', '')
                     
-                    # Look for BTC 15min patterns in title or slug
-                    is_btc = 'btc' in title or 'bitcoin' in title or 'btc' in slug
-                    is_15min = '15m' in slug or any(p in title for p in ['15 min', '15min', '15-min'])
-                    
-                    if is_btc and is_15min:
-                        # Check if it's an Up/Down market
-                        tokens = market.get('tokens', [])
-                        if len(tokens) == 2:
-                            token_names = [t.get('outcome', '').lower() for t in tokens]
-                            if 'up' in token_names and 'down' in token_names:
-                                # Check if market is active
-                                active = market.get('active', False)
-                                closed = market.get('closed', True)
-                                
-                                if active and not closed:
+                    # Check if this market matches one of our predicted slugs
+                    if market_slug in candidate_slug_set:
+                        # Verify it's active and has UP/DOWN tokens
+                        active = market.get('active', False)
+                        closed = market.get('closed', True)
+                        
+                        if active and not closed:
+                            tokens = market.get('tokens', [])
+                            if len(tokens) == 2:
+                                token_names = [t.get('outcome', '').lower() for t in tokens]
+                                if 'up' in token_names and 'down' in token_names:
                                     logger.info(f"✓ Found active market: {market.get('question')}")
+                                    logger.info(f"  Slug: {market_slug}")
                                     logger.info(f"  Condition ID: {market.get('condition_id')}")
-                                    logger.info(f"  Slug: {slug}")
+                                    logger.info(f"  End date: {market.get('end_date_iso')}")
                                     return market
                 
-                if not next_cursor or next_cursor == "0":
-                    break
+                logger.warning("No matching BTC 15min market found in recent markets")
                 
-                # Log progress every 500 markets
-                if scanned_count % 500 == 0:
-                    logger.debug(f"Scanned {scanned_count} markets...")
+            except Exception as e:
+                logger.error(f"Error scanning CLOB markets: {e}")
             
-            logger.warning(f"No active Bitcoin 15min market found (scanned {scanned_count} markets)")
-            logger.info("💡 TIP: If you know the condition_id of an active market, add it to config.json:")
-            logger.info('   "market_settings": { "manual_condition_id": "0x..." }')
+            # Fallback: try a broader search (up to 500 markets)
+            logger.info("Trying broader search (500 markets)...")
+            try:
+                response = self.client.get_markets(next_cursor="")
+                markets = []
+                if isinstance(response, dict):
+                    markets = response.get('data', [])[:500]
+                elif isinstance(response, list):
+                    markets = response[:500]
+                
+                for market in markets:
+                    if not isinstance(market, dict):
+                        continue
+                    
+                    slug = market.get('slug', '').lower()
+                    
+                    # Look for btc-updown-15m pattern
+                    if slug.startswith('btc-updown-15m-'):
+                        active = market.get('active', False)
+                        closed = market.get('closed', True)
+                        
+                        if active and not closed:
+                            tokens = market.get('tokens', [])
+                            if len(tokens) == 2:
+                                token_names = [t.get('outcome', '').lower() for t in tokens]
+                                if 'up' in token_names and 'down' in token_names:
+                                    logger.info(f"✓ Found via broader search: {market.get('question')}")
+                                    logger.info(f"  Slug: {slug}")
+                                    logger.info(f"  Condition ID: {market.get('condition_id')}")
+                                    return market
+                
+            except Exception as e:
+                logger.error(f"Error in broader search: {e}")
+            
+            logger.warning("No active Bitcoin 15min market found")
+            logger.info("💡 TIP: Provide manual_condition_id in config.json if you know the market")
             return None
             
         except Exception as e:
