@@ -199,8 +199,9 @@ class PolymarketClient:
             USDC balance or None on error
         """
         try:
-            balance = self.client.get_balance()
-            usdc_balance = float(balance.get('usdc', 0))
+            # Use get_balance_allowance to fetch USDC balance
+            balance_allowance = self.client.get_balance_allowance()
+            usdc_balance = float(balance_allowance.get('balance', 0))
             logger.info(f"Current USDC balance: {usdc_balance}")
             return usdc_balance
         except Exception as e:
