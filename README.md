@@ -29,12 +29,13 @@ Edit `config.json` and add your Polymarket credentials:
 ```json
 {
   "api_credentials": {
-    "api_key": "YOUR_POLYMARKET_API_KEY",
-    "private_key": "YOUR_PRIVATE_KEY",
-    "wallet_address": "YOUR_WALLET_ADDRESS"
+    "private_key": "YOUR_PRIVATE_KEY_HEX",
+    "wallet_address": "0xYOUR_WALLET_ADDRESS"
   }
 }
 ```
+
+> **Note**: L'API key est automatiquement dérivée de votre clé privée, vous n'avez pas besoin de la fournir séparément.
 
 ### 3. Adjust Trading Parameters (Optional)
 
