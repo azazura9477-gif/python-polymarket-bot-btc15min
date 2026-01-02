@@ -226,22 +226,36 @@ class PolymarketClient:
             if isinstance(balance_allowance, dict):
                 usdc_balance_raw = balance_allowance.get('balance')
 
-            # Normalize to float USDC amount
-            if usdc_balance_raw is None:
-                usdc_balance = 0.0
-            else:
-                usdc_balance = 0.0
-                # Try float parsing first (covers '0', '0.0', '1.23')
-                try:
-                    usdc_balance = float(usdc_balance_raw)
-                except (ValueError, TypeError):
-                    # If it's an integer-like string representing base units (e.g. 6 decimals), convert
+            # Normalize to float USDC amount with robust heuristics
+            def _normalize(raw):
+                if raw is None:
+                    return 0.0
+                if isinstance(raw, int):
+                    return raw / 1e6 if raw >= 1_000_000 else float(raw)
+                if isinstance(raw, float):
+                    return raw
+                if isinstance(raw, str):
+                    s = raw.strip()
+                    if not s:
+                        return 0.0
+                    if '.' in s:
+                        try:
+                            return float(s)
+                        except Exception:
+                            return 0.0
+                    if s.lstrip('-').isdigit():
+                        try:
+                            int_val = int(s)
+                            return int_val / 1e6 if abs(int_val) >= 1_000_000 else float(int_val)
+                        except Exception:
+                            return 0.0
                     try:
-                        int_val = int(usdc_balance_raw)
-                        # Assume USDC has 6 decimals if value looks large
-                        usdc_balance = int_val / 1e6
+                        return float(s)
                     except Exception:
-                        usdc_balance = 0.0
+                        return 0.0
+                return 0.0
+
+            usdc_balance = _normalize(usdc_balance_raw)
 
             logger.info(f"Current USDC balance: {usdc_balance}")
             return usdc_balance

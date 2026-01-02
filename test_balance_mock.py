@@ -9,14 +9,40 @@ from typing import Any
 def normalize_balance(usdc_balance_raw: Any) -> float:
     if usdc_balance_raw is None:
         return 0.0
-    try:
-        return float(usdc_balance_raw)
-    except (ValueError, TypeError):
+
+    # Integers: likely base units (e.g. 1000000 == 1 USDC)
+    if isinstance(usdc_balance_raw, int):
+        return usdc_balance_raw / 1e6 if usdc_balance_raw >= 1_000_000 else float(usdc_balance_raw)
+
+    # Floats: already human-readable USDC
+    if isinstance(usdc_balance_raw, float):
+        return usdc_balance_raw
+
+    # Strings: handle decimals and integer-like base-units
+    if isinstance(usdc_balance_raw, str):
+        s = usdc_balance_raw.strip()
+        if not s:
+            return 0.0
+        # If contains a dot, parse as float
+        if '.' in s:
+            try:
+                return float(s)
+            except Exception:
+                return 0.0
+        # Digit-only string: interpret as base units if large
+        if s.lstrip('-').isdigit():
+            try:
+                int_val = int(s)
+                return int_val / 1e6 if abs(int_val) >= 1_000_000 else float(int_val)
+            except Exception:
+                return 0.0
+        # Fallback
         try:
-            int_val = int(usdc_balance_raw)
-            return int_val / 1e6
+            return float(s)
         except Exception:
             return 0.0
+
+    return 0.0
 
 
 if __name__ == "__main__":
