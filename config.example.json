@@ -1,0 +1,21 @@
+{
+  "api_credentials": {
+    "api_key": "YOUR_POLYMARKET_API_KEY",
+    "private_key": "YOUR_PRIVATE_KEY_HEX",
+    "wallet_address": "0xYOUR_WALLET_ADDRESS"
+  },
+  "trading_parameters": {
+    "position_value_usdc": 10,
+    "entry_threshold_percent": 5.0,
+    "entry_price_threshold": 0.60,
+    "exit_reversal_percent": 5.0,
+    "check_interval_seconds": 1
+  },
+  "market_settings": {
+    "market_keywords": ["bitcoin", "15"]
+  },
+  "logging": {
+    "log_file": "trading_bot.log",
+    "log_level": "INFO"
+  }
+}
