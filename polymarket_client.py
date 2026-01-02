@@ -221,14 +221,25 @@ class PolymarketClient:
                 side=side
             )
             
-            order = self.client.create_order(order_args)
-            order_id = order.get('orderID')
+            signed_order = self.client.create_order(order_args)
             
-            logger.info(f"Order placed: {side} {size} shares at ${price} - Order ID: {order_id}")
+            # SignedOrder is an object with attributes, not a dict
+            # Post the order to the exchange
+            response = self.client.post_order(signed_order, OrderType.GTC)
+            
+            # Response should be a dict with orderID
+            if isinstance(response, dict):
+                order_id = response.get('orderID', 'unknown')
+            else:
+                order_id = str(response)
+            
+            logger.info(f"✓ Order placed: {side} {size} shares at ${price} - Order ID: {order_id}")
             return order_id
             
         except Exception as e:
             logger.error(f"Error placing order: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def get_token_id(self, market: Dict, outcome: str) -> Optional[str]:
