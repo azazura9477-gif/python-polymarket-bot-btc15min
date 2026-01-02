@@ -37,6 +37,23 @@ Edit `config.json` and add your Polymarket credentials:
 
 > **Note**: L'API key est automatiquement dérivée de votre clé privée, vous n'avez pas besoin de la fournir séparément.
 
+### 3. (Optionnel) Générer un nouveau wallet
+
+Un petit utilitaire est fourni pour générer une nouvelle paire **clé privée / adresse** et (optionnellement) l'enregistrer dans `config.json` :
+
+```bash
+# affiche la clé privée et l'adresse générées
+python create_wallet.py
+
+# sauvegarde directement dans config.json (ne remplace pas api_credentials existantes sans --force)
+python create_wallet.py --save config.json
+
+# forcer l'écrasement des api_credentials dans config.json
+python create_wallet.py --save config.json --force
+```
+
+> **Sécurité**: Ne partagez jamais votre clé privée. Stockez-la dans un endroit sûr et hors ligne lorsque c'est possible.
+
 ### 3. Adjust Trading Parameters (Optional)
 
 Modify trading parameters in `config.json`:
