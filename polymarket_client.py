@@ -35,6 +35,14 @@ class PolymarketClient:
             )
             logger.info("Polymarket client initialized successfully")
             logger.info(f"Connected with wallet: {wallet_address}")
+            
+            # Create API credentials for authenticated endpoints
+            try:
+                self.client.create_api_key()
+                logger.info("API credentials created successfully")
+            except Exception as api_error:
+                logger.warning(f"Could not create API key: {api_error}")
+                
         except Exception as e:
             logger.error(f"Failed to initialize Polymarket client: {e}")
             raise
