@@ -3,7 +3,7 @@ Trading strategy implementation for Polymarket Bitcoin 15min Up/Down market.
 
 Entry Conditions:
 1. Price increases 5% from its recent low, OR
-2. Price exceeds $0.60 (if condition 1 hasn't been met)
+2. Price is BELOW $0.60 (undervalued opportunity)
 
 Exit/Reversal Condition:
 - Position price drops 5% from its recent high -> close and flip to inverse position
@@ -131,10 +131,10 @@ class TradingStrategy:
                               f"(${state.low_price:.4f} -> ${state.current_price:.4f})")
                     return outcome
             
-            # Condition 2: Price exceeds threshold (only if condition 1 hasn't been met)
-            if not state.entry_condition_met and state.current_price >= self.entry_price_threshold:
-                logger.info(f"ENTRY SIGNAL: {outcome} exceeded ${self.entry_price_threshold} "
-                          f"(current: ${state.current_price:.4f})")
+            # Condition 2: Price is undervalued (BELOW threshold - good buying opportunity)
+            if not state.entry_condition_met and state.current_price <= self.entry_price_threshold:
+                logger.info(f"ENTRY SIGNAL: {outcome} undervalued at ${state.current_price:.4f} "
+                          f"(threshold: ${self.entry_price_threshold})")
                 return outcome
         
         return None
