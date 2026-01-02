@@ -213,18 +213,18 @@ class PolymarketClient:
             Order ID if successful, None otherwise
         """
         try:
+            # OrderArgs requires specific parameters without order_type
             order_args = OrderArgs(
                 token_id=token_id,
                 price=price,
                 size=size,
-                side=side,
-                order_type=OrderType.GTC  # Good Till Cancelled
+                side=side
             )
             
             order = self.client.create_order(order_args)
             order_id = order.get('orderID')
             
-            logger.info(f"Order placed: {side} {size} shares at {price} - Order ID: {order_id}")
+            logger.info(f"Order placed: {side} {size} shares at ${price} - Order ID: {order_id}")
             return order_id
             
         except Exception as e:
