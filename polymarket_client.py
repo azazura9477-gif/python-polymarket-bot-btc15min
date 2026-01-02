@@ -2,6 +2,7 @@
 Polymarket API client wrapper for market detection and trading operations.
 """
 import logging
+import requests
 from typing import Optional, Dict, List, Tuple
 from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import OrderArgs, OrderType, BalanceAllowanceParams, AssetType
@@ -9,6 +10,9 @@ from py_clob_client.constants import POLYGON
 
 
 logger = logging.getLogger("PolymarketBot")
+
+# Polymarket Gamma API endpoint
+GAMMA_API_URL = "https://gamma-api.polymarket.com"
 
 
 class PolymarketClient:
@@ -57,7 +61,7 @@ class PolymarketClient:
     
     def find_bitcoin_15min_market(self, keywords: List[str]) -> Optional[Dict]:
         """
-        Find the active Bitcoin Up/Down 15min market.
+        Find the active Bitcoin Up/Down 15min market using Gamma API.
         
         Args:
             keywords: List of keywords to search for in market title
@@ -66,68 +70,74 @@ class PolymarketClient:
             Market data dictionary or None if not found
         """
         try:
-            next_cursor = ""
-            scanned_count = 0
+            logger.info("Searching for Bitcoin 15min markets via Gamma API...")
+            
+            # Query Gamma API for active markets
+            url = f"{GAMMA_API_URL}/markets"
+            params = {
+                'active': 'true',
+                'closed': 'false',
+                'limit': 100
+            }
+            
+            response = requests.get(url, params=params, timeout=10)
+            
+            if response.status_code != 200:
+                logger.error(f"Gamma API returned status {response.status_code}")
+                return None
+            
+            markets = response.json()
+            
+            if not isinstance(markets, list):
+                logger.warning(f"Unexpected Gamma API response format: {type(markets)}")
+                return None
+            
+            logger.info(f"Retrieved {len(markets)} markets from Gamma API")
+            
+            # Search for BTC 15min markets
             candidates = []
             
-            while True:
-                # Get active markets with pagination
-                response = self.client.get_markets(next_cursor=next_cursor)
+            for market in markets:
+                title = market.get('question', '').lower()
+                description = market.get('description', '').lower()
                 
-                markets = []
-                if isinstance(response, dict):
-                    markets = response.get('data', [])
-                    next_cursor = response.get('next_cursor', "")
-                elif isinstance(response, list):
-                    markets = response
-                    next_cursor = ""
-                else:
-                    logger.warning(f"Unexpected response type: {type(response)}")
-                    break
+                # Match BTC 15min patterns
+                is_btc = 'btc' in title or 'bitcoin' in title
+                is_15min = any(pattern in title or pattern in description for pattern in [
+                    '15m', '15 m', 'fifteen min', '15-m', '15min'
+                ])
                 
-                if not markets:
-                    break
+                if is_btc and is_15min:
+                    # Check for UP/DOWN outcomes
+                    outcomes = market.get('outcomes', [])
+                    outcome_names = [o.lower() for o in outcomes]
                     
-                scanned_count += len(markets)
-                logger.debug(f"Scanning page... (Total scanned: {scanned_count})")
-                
-                # Search for Bitcoin 15min market
-                for market in markets:
-                    # Ensure market is a dictionary
-                    if not isinstance(market, dict):
-                        continue
+                    if 'up' in outcome_names and 'down' in outcome_names:
+                        # Convert Gamma API format to CLOB format
+                        condition_id = market.get('conditionId')
                         
-                    title = market.get('question', '').lower()
-                    
-                    # More specific matching for "15 minutes" or "15min" markets
-                    # Avoid matching dates like "March 15" or "15th"
-                    is_15min = any(pattern in title for pattern in [
-                        '15 min', '15min', '15-min', 'fifteen min',
-                        'next 15', 'in 15 minutes'
-                    ])
-                    
-                    # Must have both bitcoin and 15min reference
-                    if 'bitcoin' in title and is_15min:
-                        # Check if it's an Up/Down market
-                        tokens = market.get('tokens', [])
-                        if len(tokens) == 2:
-                            token_names = [t.get('outcome', '').lower() for t in tokens]
-                            if 'up' in token_names and 'down' in token_names:
-                                # Check if market is still active (not ended)
-                                end_date = market.get('end_date_iso')
-                                active = market.get('active', True)
-                                
-                                if active:
-                                    candidates.append(market)
-                                    logger.info(f"Found candidate: {market.get('question')} (ID: {market.get('condition_id')})")
-                
-                # Stop if no next page or if we found candidates
-                if not next_cursor or next_cursor == "0":
-                    break
-                    
-                # Stop early if we found some candidates and scanned enough
-                if candidates and scanned_count > 5000:
-                    break
+                        # Build token list
+                        tokens = []
+                        for outcome in outcomes:
+                            tokens.append({
+                                'outcome': outcome,
+                                'token_id': market.get('clobTokenIds', [])[outcomes.index(outcome)] if market.get('clobTokenIds') else None,
+                                'price': None  # Will be fetched later
+                            })
+                        
+                        clob_market = {
+                            'question': market.get('question'),
+                            'condition_id': condition_id,
+                            'slug': market.get('slug', ''),
+                            'end_date_iso': market.get('endDate'),
+                            'active': market.get('active', True),
+                            'closed': market.get('closed', False),
+                            'tokens': tokens,
+                            'description': market.get('description', '')
+                        }
+                        
+                        candidates.append(clob_market)
+                        logger.info(f"Found candidate: {market.get('question')} (ID: {condition_id})")
             
             if candidates:
                 # Return the first active candidate
@@ -135,9 +145,12 @@ class PolymarketClient:
                 logger.info(f"Selected market: {market.get('question')} (ID: {market.get('condition_id')})")
                 return market
             
-            logger.warning(f"No active Bitcoin 15min Up/Down market found after scanning {scanned_count} markets")
+            logger.warning(f"No active Bitcoin 15min Up/Down market found in Gamma API")
             return None
             
+        except requests.RequestException as e:
+            logger.error(f"Error connecting to Gamma API: {e}")
+            return None
         except Exception as e:
             logger.error(f"Error searching for market: {e}")
             return None
