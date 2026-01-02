@@ -1,7 +1,8 @@
 {
   "api_credentials": {
-    "private_key": "YOUR_PRIVATE_KEY_HEX",
-    "wallet_address": "0xYOUR_WALLET_ADDRESS"
+    "api_key": "YOUR_POLYMARKET_API_KEY",
+    "private_key": "YOUR_PRIVATE_KEY",
+    "wallet_address": "YOUR_WALLET_ADDRESS"
   },
   "trading_parameters": {
     "position_value_usdc": 10,
@@ -11,10 +12,8 @@
     "check_interval_seconds": 1
   },
   "market_settings": {
-    "market_keywords": [
-      "bitcoin",
-      "15"
-    ]
+    "market_keywords": ["bitcoin", "btc", "15min", "15 min", "up", "down"],
+    "manual_condition_id": null
   },
   "logging": {
     "log_file": "trading_bot.log",
