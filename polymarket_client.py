@@ -51,10 +51,23 @@ class PolymarketClient:
         """
         try:
             # Get all active markets
-            markets = self.client.get_markets()
+            response = self.client.get_markets()
+            
+            # Handle potential pagination/dictionary response
+            if isinstance(response, dict):
+                markets = response.get('data', [])
+            elif isinstance(response, list):
+                markets = response
+            else:
+                logger.warning(f"Unexpected response type from get_markets: {type(response)}")
+                markets = []
             
             # Search for Bitcoin 15min market
             for market in markets:
+                # Ensure market is a dictionary
+                if not isinstance(market, dict):
+                    continue
+                    
                 title = market.get('question', '').lower()
                 
                 # Check if all required keywords are in the title
