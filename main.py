@@ -39,7 +39,6 @@ class PolymarketTradingBot:
         
         # Initialize components
         self.client = PolymarketClient(
-            api_key=self.config['api_credentials']['api_key'],
             private_key=self.config['api_credentials']['private_key'],
             wallet_address=self.config['api_credentials']['wallet_address']
         )
