@@ -4,9 +4,7 @@ Quick test to verify deposit_usdc.py can load and connect.
 This doesn't execute transactions, just validates setup.
 """
 import sys
-from deposit_usdc import load_credentials, RPC_URL
-from web3 import Web3
-from web3.middleware import ExtraDataToPOAMiddleware
+from deposit_usdc import load_credentials, connect_to_polygon
 
 try:
     # Test loading credentials
@@ -17,14 +15,10 @@ try:
     print(f"✓ Credentials loaded: {wallet_address}")
     
     # Test Web3 connection
-    print(f"\nTesting connection to {RPC_URL}...")
-    web3 = Web3(Web3.HTTPProvider(RPC_URL))
-    web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+    print("\nTesting connection to Polygon...")
+    web3, rpc_url = connect_to_polygon()
     
-    if not web3.is_connected():
-        raise Exception("Failed to connect to Polygon")
-    
-    print("✓ Connected to Polygon")
+    print(f"✓ Using RPC: {rpc_url}")
     
     # Test balance query
     balance = web3.eth.get_balance(wallet_address)

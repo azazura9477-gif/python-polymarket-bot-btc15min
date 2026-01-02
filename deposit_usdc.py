@@ -29,8 +29,14 @@ CTF_EXCHANGE = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E'
 NEG_RISK_CTF_EXCHANGE = '0xC5d563A36AE78145C45a50134d48A1215220f80a'
 NEG_RISK_ADAPTER = '0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296'
 
-# Polygon RPC
-RPC_URL = 'https://polygon.llamarpc.com'
+# Polygon RPC URLs (with fallbacks)
+RPC_URLS = [
+    'https://polygon-rpc.com',
+    'https://polygon.llamarpc.com',
+    'https://rpc-mainnet.matic.network',
+    'https://rpc-mainnet.maticvigil.com',
+    'https://polygon-bor-rpc.publicnode.com',
+]
 CHAIN_ID = 137
 
 # Minimal ABIs
@@ -319,6 +325,31 @@ def set_allowances(web3, private_key, wallet_address):
     print("\n✅ All allowances set successfully!")
 
 
+def connect_to_polygon():
+    """Try multiple RPC endpoints to connect to Polygon"""
+    for i, rpc_url in enumerate(RPC_URLS, 1):
+        try:
+            print(f"Attempting connection {i}/{len(RPC_URLS)}: {rpc_url}...")
+            web3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={'timeout': 10}))
+            web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+            
+            # Test connection with a simple call
+            if web3.is_connected():
+                chain_id = web3.eth.chain_id
+                if chain_id == CHAIN_ID:
+                    print(f"✓ Connected to Polygon (chain_id: {chain_id})")
+                    return web3, rpc_url
+                else:
+                    print(f"✗ Wrong chain (expected {CHAIN_ID}, got {chain_id})")
+            else:
+                print(f"✗ Connection failed")
+        except Exception as e:
+            print(f"✗ Error: {str(e)[:60]}")
+            continue
+    
+    raise Exception("Failed to connect to Polygon with any RPC endpoint. Check your network connection.")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Set allowances and deposit USDC to Polymarket'
@@ -338,16 +369,13 @@ def main():
     # Load credentials
     private_key, wallet_address = load_credentials()
     
-    # Connect to Polygon
-    print(f"Connecting to Polygon via {RPC_URL}...")
-    web3 = Web3(Web3.HTTPProvider(RPC_URL))
-    web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
-    
-    if not web3.is_connected():
-        print("Failed to connect to Polygon")
+    # Connect to Polygon with fallback RPCs
+    print("Connecting to Polygon...")
+    try:
+        web3, rpc_url = connect_to_polygon()
+    except Exception as e:
+        print(f"\n❌ {e}")
         sys.exit(1)
-    
-    print("✓ Connected to Polygon")
     
     # Check balances
     matic_balance, usdc_balance = check_balances(web3, wallet_address)
