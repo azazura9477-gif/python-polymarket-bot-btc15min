@@ -4,7 +4,7 @@ Polymarket API client wrapper for market detection and trading operations.
 import logging
 from typing import Optional, Dict, List, Tuple
 from py_clob_client.client import ClobClient
-from py_clob_client.clob_types import OrderArgs, OrderType
+from py_clob_client.clob_types import OrderArgs, OrderType, BalanceAllowanceParams, AssetType
 from py_clob_client.constants import POLYGON
 
 
@@ -215,9 +215,11 @@ class PolymarketClient:
             USDC balance or None on error
         """
         try:
+            # Create params for COLLATERAL asset type (USDC)
+            params = BalanceAllowanceParams(asset_type=AssetType.COLLATERAL)
+            
             # Use get_balance_allowance to fetch USDC balance
-            # Pass params=None to use defaults (gets all balances)
-            balance_allowance = self.client.get_balance_allowance(params=None)
+            balance_allowance = self.client.get_balance_allowance(params=params)
             
             # The response contains balance information
             usdc_balance = balance_allowance.get('balance')
