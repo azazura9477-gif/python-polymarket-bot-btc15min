@@ -36,12 +36,12 @@ class PolymarketClient:
             logger.info("Polymarket client initialized successfully")
             logger.info(f"Connected with wallet: {wallet_address}")
             
-            # Create API credentials for authenticated endpoints
+            # Authenticate with Level 2 Poly Auth for balance queries
             try:
-                self.client.create_api_key()
-                logger.info("API credentials created successfully")
-            except Exception as api_error:
-                logger.warning(f"Could not create API key: {api_error}")
+                self.client.assert_level_2_auth()
+                logger.info("Level 2 authentication successful")
+            except Exception as auth_error:
+                logger.warning(f"Could not establish Level 2 auth: {auth_error}")
                 
         except Exception as e:
             logger.error(f"Failed to initialize Polymarket client: {e}")
