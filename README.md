@@ -54,7 +54,35 @@ python create_wallet.py --save config.json --force
 
 > **Sécurité**: Ne partagez jamais votre clé privée. Stockez-la dans un endroit sûr et hors ligne lorsque c'est possible.
 
-### 3. Adjust Trading Parameters (Optional)
+### 4. Approvisionner et configurer les allowances
+
+Avant de pouvoir trader, vous devez :
+
+**A. Transférer des fonds vers votre wallet**
+- Envoyez des **USDC** (sur Polygon) vers votre `wallet_address`
+- Envoyez un peu de **MATIC** (pour les frais de gas)
+
+**B. Définir les allowances** (une seule fois)
+
+```bash
+# Vérifier vos balances et allowances actuelles
+python deposit_usdc.py --check
+
+# Définir toutes les allowances nécessaires (nécessite du MATIC pour le gas)
+python deposit_usdc.py
+```
+
+Cette commande effectuera **6 transactions** pour approuver les contrats Polymarket :
+- USDC → CTF Exchange
+- CTF → CTF Exchange  
+- USDC → Neg Risk CTF Exchange
+- CTF → Neg Risk CTF Exchange
+- USDC → Neg Risk Adapter
+- CTF → Neg Risk Adapter
+
+> **Important** : Cette étape n'est nécessaire qu'**une seule fois** par wallet. Les allowances restent actives.
+
+### 5. Adjust Trading Parameters (Optional)
 
 Modify trading parameters in `config.json`:
 
