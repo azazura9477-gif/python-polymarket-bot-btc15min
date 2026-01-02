@@ -65,8 +65,8 @@ class PolymarketClient:
         
         Strategy:
         1. If manual_condition_id provided, fetch directly
-        2. Generate likely slugs based on 15min timestamp intervals
-        3. Scan only the first 100 markets (most recent) for matching slug
+        2. Scrape Polymarket web page for current active market
+        3. Extract condition_id from HTML and fetch via API
         
         Args:
             keywords: List of keywords (not used, kept for compatibility)
@@ -89,105 +89,65 @@ class PolymarketClient:
                 except Exception as e:
                     logger.error(f"Error fetching market {manual_condition_id}: {e}")
             
-            # Generate likely slugs based on current time
-            import time
-            from datetime import datetime
+            # NEW STRATEGY: Scrape web page to find active market
+            logger.info("🌐 Scraping Polymarket web to find active BTC 15min market...")
+            import re
+            import requests
             
             now = int(time.time())
             
-            # Generate timestamps for 15min windows (check a range around current time)
-            # Each window is 900 seconds (15 minutes)
-            candidate_slugs = []
-            for i in range(-2, 10):  # Check 2 past and 9 future windows (~ 2.5 hours)
+            # Generate URLs for the next 7 windows (1.75 hours)
+            for i in range(0, 7):
                 ts = now + (i * 900)
-                # Round to 900-second boundary
                 ts_rounded = (ts // 900) * 900
-                slug = f"btc-updown-15m-{ts_rounded}"
-                dt = datetime.fromtimestamp(ts_rounded)
-                candidate_slugs.append((slug, ts_rounded, dt))
-            
-            logger.info(f"Generated {len(candidate_slugs)} candidate slugs for timestamps")
-            logger.debug(f"Time range: {candidate_slugs[0][2]} to {candidate_slugs[-1][2]}")
-            
-            # Scan only the FIRST 100 markets (most recent) from CLOB API
-            logger.info("Scanning first 100 markets from CLOB API...")
-            
-            try:
-                response = self.client.get_markets(next_cursor="")
+                url = f"https://polymarket.com/event/btc-updown-15m-{ts_rounded}"
                 
-                markets = []
-                if isinstance(response, dict):
-                    markets = response.get('data', [])[:100]  # Only first 100
-                elif isinstance(response, list):
-                    markets = response[:100]
-                
-                logger.info(f"Retrieved {len(markets)} recent markets")
-                
-                # Match against our candidate slugs
-                candidate_slug_set = set(slug for slug, _, _ in candidate_slugs)
-                
-                for market in markets:
-                    if not isinstance(market, dict):
-                        continue
+                try:
+                    logger.info(f"  Checking: btc-updown-15m-{ts_rounded}")
+                    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+                    response = requests.get(url, headers=headers, timeout=5)
                     
-                    market_slug = market.get('slug', '')
-                    
-                    # Check if this market matches one of our predicted slugs
-                    if market_slug in candidate_slug_set:
-                        # Verify it's active and has UP/DOWN tokens
-                        active = market.get('active', False)
-                        closed = market.get('closed', True)
+                    if response.status_code == 200:
+                        # Extract condition_id from HTML using regex
+                        html = response.text
+                        pattern = r'0x[a-fA-F0-9]{64}'
+                        condition_ids = re.findall(pattern, html)
                         
-                        if active and not closed:
-                            tokens = market.get('tokens', [])
-                            if len(tokens) == 2:
-                                token_names = [t.get('outcome', '').lower() for t in tokens]
-                                if 'up' in token_names and 'down' in token_names:
-                                    logger.info(f"✓ Found active market: {market.get('question')}")
-                                    logger.info(f"  Slug: {market_slug}")
-                                    logger.info(f"  Condition ID: {market.get('condition_id')}")
-                                    logger.info(f"  End date: {market.get('end_date_iso')}")
-                                    return market
-                
-                logger.warning("No matching BTC 15min market found in recent markets")
-                
-            except Exception as e:
-                logger.error(f"Error scanning CLOB markets: {e}")
-            
-            # Fallback: try a broader search (up to 500 markets)
-            logger.info("Trying broader search (500 markets)...")
-            try:
-                response = self.client.get_markets(next_cursor="")
-                markets = []
-                if isinstance(response, dict):
-                    markets = response.get('data', [])[:500]
-                elif isinstance(response, list):
-                    markets = response[:500]
-                
-                for market in markets:
-                    if not isinstance(market, dict):
-                        continue
-                    
-                    slug = market.get('slug', '').lower()
-                    
-                    # Look for btc-updown-15m pattern
-                    if slug.startswith('btc-updown-15m-'):
-                        active = market.get('active', False)
-                        closed = market.get('closed', True)
+                        if condition_ids:
+                            # Take the first condition_id found
+                            condition_id = condition_ids[0]
+                            logger.info(f"  ✓ Found condition_id: {condition_id[:20]}...")
+                            
+                            # Fetch market via API
+                            market = self.client.get_market(condition_id)
+                            
+                            if market:
+                                active = market.get('active', False)
+                                closed = market.get('closed', True)
+                                
+                                if active and not closed:
+                                    logger.info(f"✅ Found active market!")
+                                    logger.info(f"   Question: {market.get('question')}")
+                                    logger.info(f"   Condition ID: {condition_id}")
+                                    
+                                    # Verify UP/DOWN tokens exist
+                                    tokens = market.get('tokens', [])
+                                    if len(tokens) == 2:
+                                        token_names = [t.get('outcome', '').upper() for t in tokens]
+                                        if 'UP' in token_names and 'DOWN' in token_names:
+                                            return market
+                                
+                                logger.info(f"  Market found but not active/closed")
+                        else:
+                            logger.debug(f"  No condition_id found in HTML")
+                    else:
+                        logger.debug(f"  Status {response.status_code}")
                         
-                        if active and not closed:
-                            tokens = market.get('tokens', [])
-                            if len(tokens) == 2:
-                                token_names = [t.get('outcome', '').lower() for t in tokens]
-                                if 'up' in token_names and 'down' in token_names:
-                                    logger.info(f"✓ Found via broader search: {market.get('question')}")
-                                    logger.info(f"  Slug: {slug}")
-                                    logger.info(f"  Condition ID: {market.get('condition_id')}")
-                                    return market
-                
-            except Exception as e:
-                logger.error(f"Error in broader search: {e}")
+                except Exception as e:
+                    logger.debug(f"  Error: {e}")
+                    continue
             
+            logger.warning("No active BTC 15min market found via web scraping")
             logger.warning("No active Bitcoin 15min market found")
             logger.info("💡 TIP: Provide manual_condition_id in config.json if you know the market")
             return None
