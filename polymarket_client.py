@@ -61,98 +61,102 @@ class PolymarketClient:
     
     def find_bitcoin_15min_market(self, keywords: List[str]) -> Optional[Dict]:
         """
-        Find the active Bitcoin Up/Down 15min market using Gamma API.
+        Find the active Bitcoin Up/Down 15min market by generating likely slugs.
+        
+        BTC 15min markets follow the pattern: btc-updown-15m-{timestamp}
+        where timestamp is rounded to 15-minute intervals.
         
         Args:
-            keywords: List of keywords to search for in market title
+            keywords: List of keywords (not used, kept for compatibility)
         
         Returns:
             Market data dictionary or None if not found
         """
         try:
-            logger.info("Searching for Bitcoin 15min markets via Gamma API...")
+            import time
+            from datetime import datetime
             
-            # Query Gamma API for active markets
-            url = f"{GAMMA_API_URL}/markets"
-            params = {
-                'active': 'true',
-                'closed': 'false',
-                'limit': 100
-            }
+            logger.info("Searching for Bitcoin 15min markets by timestamp prediction...")
             
-            response = requests.get(url, params=params, timeout=10)
+            # Generate likely timestamps for current and next 15min windows
+            now = int(time.time())
             
-            if response.status_code != 200:
-                logger.error(f"Gamma API returned status {response.status_code}")
-                return None
+            # Generate timestamps for the next hour (4 x 15min windows)
+            candidate_timestamps = []
+            for i in range(-2, 8):  # Check 2 windows back and 7 forward
+                ts = now + (i * 15 * 60)
+                # Round to 15-minute boundary
+                ts_rounded = (ts // (15 * 60)) * (15 * 60)
+                if ts_rounded not in candidate_timestamps:
+                    candidate_timestamps.append(ts_rounded)
             
-            markets = response.json()
+            logger.info(f"Checking {len(candidate_timestamps)} potential 15min windows...")
             
-            if not isinstance(markets, list):
-                logger.warning(f"Unexpected Gamma API response format: {type(markets)}")
-                return None
-            
-            logger.info(f"Retrieved {len(markets)} markets from Gamma API")
-            
-            # Search for BTC 15min markets
-            candidates = []
-            
-            for market in markets:
-                title = market.get('question', '').lower()
-                description = market.get('description', '').lower()
+            # Try each potential slug
+            for ts in candidate_timestamps:
+                slug = f"btc-updown-15m-{ts}"
+                dt = datetime.fromtimestamp(ts)
                 
-                # Match BTC 15min patterns
-                is_btc = 'btc' in title or 'bitcoin' in title
-                is_15min = any(pattern in title or pattern in description for pattern in [
-                    '15m', '15 m', 'fifteen min', '15-m', '15min'
-                ])
-                
-                if is_btc and is_15min:
-                    # Check for UP/DOWN outcomes
-                    outcomes = market.get('outcomes', [])
-                    outcome_names = [o.lower() for o in outcomes]
+                try:
+                    # Try to get market from Gamma API by slug
+                    url = f"{GAMMA_API_URL}/markets/{slug}"
+                    response = requests.get(url, timeout=5)
                     
-                    if 'up' in outcome_names and 'down' in outcome_names:
-                        # Convert Gamma API format to CLOB format
-                        condition_id = market.get('conditionId')
+                    if response.status_code == 200:
+                        market_data = response.json()
                         
-                        # Build token list
-                        tokens = []
-                        for outcome in outcomes:
-                            tokens.append({
-                                'outcome': outcome,
-                                'token_id': market.get('clobTokenIds', [])[outcomes.index(outcome)] if market.get('clobTokenIds') else None,
-                                'price': None  # Will be fetched later
-                            })
-                        
-                        clob_market = {
-                            'question': market.get('question'),
-                            'condition_id': condition_id,
-                            'slug': market.get('slug', ''),
-                            'end_date_iso': market.get('endDate'),
-                            'active': market.get('active', True),
-                            'closed': market.get('closed', False),
-                            'tokens': tokens,
-                            'description': market.get('description', '')
-                        }
-                        
-                        candidates.append(clob_market)
-                        logger.info(f"Found candidate: {market.get('question')} (ID: {condition_id})")
+                        # Check if market is active and not closed
+                        if market_data.get('active') and not market_data.get('closed'):
+                            logger.info(f"✓ Found active market: {slug} (ends {dt})")
+                            
+                            # Convert to CLOB format
+                            outcomes = market_data.get('outcomes', [])
+                            if isinstance(outcomes, str):
+                                import json
+                                outcomes = json.loads(outcomes)
+                            
+                            clob_token_ids = market_data.get('clobTokenIds', [])
+                            if isinstance(clob_token_ids, str):
+                                import json
+                                clob_token_ids = json.loads(clob_token_ids)
+                            
+                            tokens = []
+                            for idx, outcome in enumerate(outcomes):
+                                token_id = clob_token_ids[idx] if idx < len(clob_token_ids) else None
+                                tokens.append({
+                                    'outcome': outcome,
+                                    'token_id': token_id,
+                                    'price': None
+                                })
+                            
+                            market = {
+                                'question': market_data.get('question'),
+                                'condition_id': market_data.get('conditionId'),
+                                'slug': slug,
+                                'end_date_iso': market_data.get('endDate'),
+                                'active': True,
+                                'closed': False,
+                                'tokens': tokens
+                            }
+                            
+                            logger.info(f"Market: {market.get('question')}")
+                            logger.info(f"Condition ID: {market.get('condition_id')}")
+                            logger.info(f"Tokens: {[t['outcome'] for t in tokens]}")
+                            
+                            return market
+                    
+                except Exception as e:
+                    # Skip this timestamp if error
+                    continue
             
-            if candidates:
-                # Return the first active candidate
-                market = candidates[0]
-                logger.info(f"Selected market: {market.get('question')} (ID: {market.get('condition_id')})")
-                return market
-            
-            logger.warning(f"No active Bitcoin 15min Up/Down market found in Gamma API")
+            logger.warning(f"No active Bitcoin 15min market found in checked time windows")
+            logger.info(f"Checked timestamps from {datetime.fromtimestamp(candidate_timestamps[0])} to {datetime.fromtimestamp(candidate_timestamps[-1])}")
             return None
             
-        except requests.RequestException as e:
-            logger.error(f"Error connecting to Gamma API: {e}")
-            return None
         except Exception as e:
             logger.error(f"Error searching for market: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def get_current_prices(self, market_id: str) -> Optional[Dict[str, float]]:
