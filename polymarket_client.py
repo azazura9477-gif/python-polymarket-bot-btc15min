@@ -14,20 +14,19 @@ logger = logging.getLogger("PolymarketBot")
 class PolymarketClient:
     """Wrapper for Polymarket CLOB API interactions."""
     
-    def __init__(self, api_key: str, private_key: str, wallet_address: str):
+    def __init__(self, private_key: str, wallet_address: str):
         """
         Initialize the Polymarket client.
         
         Args:
-            api_key: Polymarket API key
-            private_key: Private key for signing transactions
+            private_key: Private key for signing transactions (hex format)
             wallet_address: Wallet address
         """
-        self.api_key = api_key
         self.private_key = private_key
         self.wallet_address = wallet_address
         
         # Initialize CLOB client
+        # The API key is automatically derived from the private key by py-clob-client
         try:
             self.client = ClobClient(
                 host="https://clob.polymarket.com",
@@ -35,6 +34,7 @@ class PolymarketClient:
                 chain_id=POLYGON
             )
             logger.info("Polymarket client initialized successfully")
+            logger.info(f"Connected with wallet: {wallet_address}")
         except Exception as e:
             logger.error(f"Failed to initialize Polymarket client: {e}")
             raise
