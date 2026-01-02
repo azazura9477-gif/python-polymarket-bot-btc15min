@@ -50,37 +50,53 @@ class PolymarketClient:
             Market data dictionary or None if not found
         """
         try:
-            # Get all active markets
-            response = self.client.get_markets()
+            next_cursor = ""
+            scanned_count = 0
             
-            # Handle potential pagination/dictionary response
-            if isinstance(response, dict):
-                markets = response.get('data', [])
-            elif isinstance(response, list):
-                markets = response
-            else:
-                logger.warning(f"Unexpected response type from get_markets: {type(response)}")
-                markets = []
-            
-            # Search for Bitcoin 15min market
-            for market in markets:
-                # Ensure market is a dictionary
-                if not isinstance(market, dict):
-                    continue
-                    
-                title = market.get('question', '').lower()
+            while True:
+                # Get active markets with pagination
+                response = self.client.get_markets(next_cursor=next_cursor)
                 
-                # Check if all required keywords are in the title
-                if all(keyword.lower() in title for keyword in ['bitcoin', '15']):
-                    # Check if it's an Up/Down market
-                    tokens = market.get('tokens', [])
-                    if len(tokens) == 2:
-                        token_names = [t.get('outcome', '').lower() for t in tokens]
-                        if 'up' in token_names and 'down' in token_names:
-                            logger.info(f"Found Bitcoin 15min market: {market.get('question')}")
-                            return market
+                markets = []
+                if isinstance(response, dict):
+                    markets = response.get('data', [])
+                    next_cursor = response.get('next_cursor', "")
+                elif isinstance(response, list):
+                    markets = response
+                    next_cursor = ""
+                else:
+                    logger.warning(f"Unexpected response type: {type(response)}")
+                    break
+                
+                if not markets:
+                    break
+                    
+                scanned_count += len(markets)
+                logger.debug(f"Scanning page... (Total scanned: {scanned_count})")
+                
+                # Search for Bitcoin 15min market
+                for market in markets:
+                    # Ensure market is a dictionary
+                    if not isinstance(market, dict):
+                        continue
+                        
+                    title = market.get('question', '').lower()
+                    
+                    # Check if all required keywords are in the title
+                    if all(keyword.lower() in title for keyword in ['bitcoin', '15']):
+                        # Check if it's an Up/Down market
+                        tokens = market.get('tokens', [])
+                        if len(tokens) == 2:
+                            token_names = [t.get('outcome', '').lower() for t in tokens]
+                            if 'up' in token_names and 'down' in token_names:
+                                logger.info(f"Found Bitcoin 15min market: {market.get('question')} (ID: {market.get('condition_id')})")
+                                return market
+                
+                # Stop if no next page
+                if not next_cursor or next_cursor == "0":
+                    break
             
-            logger.warning("No active Bitcoin 15min Up/Down market found")
+            logger.warning(f"No active Bitcoin 15min Up/Down market found after scanning {scanned_count} markets")
             return None
             
         except Exception as e:
