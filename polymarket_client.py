@@ -182,14 +182,16 @@ class PolymarketClient:
                 # Get best ask price (what we can buy for)
                 orderbook = self.client.get_order_book(token_id)
                 
-                # Use mid price or best ask for buying
-                asks = orderbook.get('asks', [])
-                if asks:
-                    best_ask = float(asks[0]['price'])
+                # OrderBookSummary is an object, not a dict - access attributes directly
+                if hasattr(orderbook, 'asks') and orderbook.asks:
+                    best_ask = float(orderbook.asks[0].price)
                     prices[outcome] = best_ask
+                elif hasattr(orderbook, 'bids') and orderbook.bids:
+                    best_bid = float(orderbook.bids[0].price)
+                    prices[outcome] = best_bid
                 else:
-                    # Fallback to last price
-                    prices[outcome] = float(token.get('price', 0))
+                    # Fallback to last price from market data
+                    prices[outcome] = float(token.get('price', 0.5))
             
             return prices
             
